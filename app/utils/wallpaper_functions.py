@@ -21,9 +21,9 @@ def get_desktop_environment() -> str:
         return "windows"
     elif sys.platform == "darwin":
         return "mac"
-    else: # Most likely either a POSIX system or something not much common
+    else:  # Most likely either a POSIX system or something not much common
         desktop_session = os.environ.get("DESKTOP_SESSION")
-        if desktop_session is not None: # easier to match if we doesn't have to deal with character cases
+        if desktop_session is not None:  # easier to match if we doesn't have to deal with character cases
             desktop_session = desktop_session.lower()
             if desktop_session in [
                 "gnome", "unity", "cinnamon", "mate", "xfce4", "lxde", "fluxbox",
@@ -43,9 +43,9 @@ def get_desktop_environment() -> str:
                 return "lxde"
             elif desktop_session.startswith("kubuntu"):
                 return "kde"
-            elif desktop_session.startswith("razor"): # e.g. razorkwin
+            elif desktop_session.startswith("razor"):  # e.g. razorkwin
                 return "razor-qt"
-            elif desktop_session.startswith("wmaker"): # e.g. wmaker-common
+            elif desktop_session.startswith("wmaker"):  # e.g. wmaker-common
                 return "windowmaker"
         gnome_desktop_session_id = os.environ.get("GNOME_DESKTOP_SESSION_ID")
         if os.environ.get("KDE_FULL_SESSION") == "true":
@@ -59,6 +59,8 @@ def get_desktop_environment() -> str:
         elif is_running("ksmserver"):
             return "kde"
     return "unknown"
+
+
 def is_running(process: str) -> bool:
     """Returns whether a process with the given name is (likely) currently running.
 
@@ -66,9 +68,9 @@ def is_running(process: str) -> bool:
     """
     # From http://www.bloggerpolis.com/2011/05/how-to-check-if-a-process-is-running-using-python/
     # and http://richarddingwall.name/2009/06/18/windows-equivalents-of-ps-and-kill-commands/
-    try: # Linux/Unix
+    try:  # Linux/Unix
         s = subprocess.Popen(["ps", "axw"], stdout=subprocess.PIPE)
-    except: # Windows
+    except:  # Windows
         s = subprocess.Popen(["tasklist", "/v"], stdout=subprocess.PIPE)
     assert s.stdout is not None
     for x in s.stdout:
@@ -76,7 +78,17 @@ def is_running(process: str) -> bool:
         if process in str(x):
             return True
     return False
+
+
+def set_lockscreen(image_data: str):
+    # This method should implement setting the lockscreen based on the OS
+    # For demonstration, let's assume it's similar to setting a wallpaper
+    print("Lockscreen setting functionality needs to be implemented")
+
+
 def set_wallpaper(image_data: str, first_run: bool = True):
+    if image_data is None:
+        return
     with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as temp_image:
         temp_image.write(image_data)
         temp_image.flush()  # Ensure all data is written to disk
@@ -234,20 +246,24 @@ def set_wallpaper(image_data: str, first_run: bool = True):
             sys.stderr.write(f"You can try manually to set your wallpaper to {file_loc}")
         return False
     return True
+
+
 def get_config_dir(app_name: str) -> str:
     """Returns the configuration directory for the given application name."""
     if "XDG_CONFIG_HOME" in os.environ:
         config_home = os.environ["XDG_CONFIG_HOME"]
-    elif "APPDATA" in os.environ: # On Windows
+    elif "APPDATA" in os.environ:  # On Windows
         config_home = os.environ["APPDATA"]
     else:
         try:
             from xdg import BaseDirectory
             config_home = BaseDirectory.xdg_config_home
-        except ImportError: # Most likely a Linux/Unix system anyway
+        except ImportError:  # Most likely a Linux/Unix system anyway
             config_home = os.path.join(get_home_dir(), ".config")
     config_dir = os.path.join(config_home, app_name)
     return config_dir
+
+
 def get_home_dir() -> str:
     """Returns the home directory of the current user."""
     return os.path.expanduser("~")

@@ -1,26 +1,23 @@
 import base64
 
-from PyQt5.QtWidgets import QMainWindow, QLabel, QVBoxLayout, QWidget, QGridLayout, QScrollArea
+from PyQt5.QtWidgets import QMainWindow, QLabel, QVBoxLayout, QWidget, QGridLayout, QScrollArea, QDialog
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import Qt
 from app.utils.sqlite import get_wallpapers
-from app.utils.wallpaper_functions import set_wallpaper
+from app.utils.wallpaper_functions import set_wallpaper, set_lockscreen
 from app.components.ImageWidget import ImageWidget
 
 
-class HistoricalWallpapersWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
+class HistoricalWallpapersWindow(QDialog):
+    def __init__(self, parent=None):
+        super(HistoricalWallpapersWindow, self).__init__(parent)
         self.setWindowTitle('Wallpaper Gallery')
         self.setGeometry(100, 100, 600, 400)  # Adjust size as needed
         self.initUI()
 
     def initUI(self):
-        self.centralWidget = QWidget(self)
-        self.setCentralWidget(self.centralWidget)
-
         # Use a QVBoxLayout for the central widget
-        layout = QVBoxLayout(self.centralWidget)
+        layout = QVBoxLayout(self)
 
         # Create a scroll area to contain the grid of images
         self.scrollArea = QScrollArea(self)
@@ -55,6 +52,4 @@ class HistoricalWallpapersWindow(QMainWindow):
         # Set the image as wallpaper
         set_wallpaper(imageData)
     def set_lockscreen(self, imageData):
-        # This method should implement setting the lockscreen based on the OS
-        # For demonstration, let's assume it's similar to setting a wallpaper
-        print("Lockscreen setting functionality needs to be implemented")
+        set_lockscreen(imageData)

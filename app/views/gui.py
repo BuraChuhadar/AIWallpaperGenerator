@@ -1,27 +1,34 @@
 import base64
+import os
 import sqlite3
 import sys
 import tempfile
+import threading
 
+from dotenv import load_dotenv
 import requests
 from PIL import Image
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QMainWindow
-from PyQt5.QtCore import Qt, pyqtSlot, QPoint
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QMainWindow, \
+    QHBoxLayout
+from PyQt5.QtCore import Qt, pyqtSlot, QPoint, pyqtSignal
 from PyQt5.QtGui import QPixmap
 
 from app.components.FloatingButtonWidget import FloatingButtonWidget
 from app.components.HoverLabel import HoverLabel
 from app.views.historical_wallpapers import HistoricalWallpapersWindow
 from app.init_db import initialize_db
-from app.utils.wallpaper_functions import set_wallpaper
+from app.utils.wallpaper_functions import set_wallpaper, set_lockscreen
 from app.wallpaper_api import OpenAIWallpaperGenerator
 
+load_dotenv()
+
 # Initialize the OpenAI Wallpaper Generator with your API key
-api_key = ""  # Replace with your actual OpenAI API key
+api_key = os.getenv('API_KEY') # Replace with your actual OpenAI API key
 wallpaper_generator = OpenAIWallpaperGenerator(api_key)
 
 
 class WallpaperGeneratorApp(QMainWindow):
+    updateUI = pyqtSignal(str)  # Define the signal
     def __init__(self):
         super().__init__()
         initialize_db()  # Initialize the database
@@ -31,7 +38,10 @@ class WallpaperGeneratorApp(QMainWindow):
         self.width = 640
         self.height = 520  # Adjusted height to accommodate the resolution dropdown
         self.selected_resolution = '1024x768'  # Default resolution
+        self.image_data = None
         self.initUI()
+
+        self.updateUI.connect(self.updateUIHandler)
 
     def initUI(self):
         self.setWindowTitle(self.title)
@@ -65,51 +75,89 @@ class WallpaperGeneratorApp(QMainWindow):
         layout.addWidget(self.resolutionDropdown)
 
         self.button = QPushButton('Generate Wallpaper', self)
-        self.button.clicked.connect(self.on_click)
+        self.button.clicked.connect(self.onGenerateWallpaperButtonClicked)
         layout.addWidget(self.button)
 
         # Use FloatingButtonWidget for image display and refresh functionality
         self.floatingButtonWidget = FloatingButtonWidget(self)
         layout.addWidget(self.floatingButtonWidget)
 
+        # Create a QHBoxLayout instance
+        hLayout = QHBoxLayout()
+
+        self.setAsWallpaperButton = QPushButton('Set As Wallpaper', self)
+        self.setAsWallpaperButton.clicked.connect(
+            self.onSetAsWallpaperButtonClicked)
+        hLayout.addWidget(self.setAsWallpaperButton)
+
+        self.setAsLockscreenButton = QPushButton('Set As Lockscreen', self)
+        self.setAsLockscreenButton.clicked.connect(
+           self.onSetAsLockscreenButtonClicked)
+        hLayout.addWidget(self.setAsLockscreenButton)
+        layout.addLayout(hLayout)
+
         self.showGalleryButton = QPushButton('Show Wallpaper Gallery', self)
         self.showGalleryButton.clicked.connect(
-            self.show_wallpaper_gallery)  # Assume show_wallpaper_gallery method exists
+            self.onShowGalleryWindowButtonClicked)  # Assume show_wallpaper_gallery method exists
         layout.addWidget(self.showGalleryButton)
+
+
 
         centralWidget = QWidget(self)
         centralWidget.setLayout(layout)
         self.setCentralWidget(centralWidget)
 
-    def show_wallpaper_gallery(self):
+    @pyqtSlot()
+    def onSetAsWallpaperButtonClicked(self):
+        set_wallpaper(self.image_data)
+
+    @pyqtSlot()
+    def onSetAsLockscreenButtonClicked(self):
+        set_lockscreen(self.image_data)
+
+    @pyqtSlot()
+    def onShowGalleryWindowButtonClicked(self):
         self.galleryWindow = HistoricalWallpapersWindow()
-        self.galleryWindow.show()
-    def generate_wallpaper(self):
+        self.galleryWindow.exec_()
+
+    def updateUIHandler(self, text):
+        # Safely update the UI based on the signal emitted from the background thread
+        if text == "loading":
+            self.floatingButtonWidget.setText("Generating Wallpaper...")
+        else:
+            self.floatingButtonWidget.setText(text)
+
+    @pyqtSlot()
+    def onGenerateWallpaperButtonClicked(self):
+        self.updateUI.emit("loading")  # Show a loading message
+        self.floatingButtonWidget.setIsLoading(True)
         description = self.textbox.text()
         self.selected_resolution = self.resolutionDropdown.currentText()
-        # Assuming generate_wallpaper method returns an image at the highest available resolution
-        image_url = wallpaper_generator.generate_wallpaper(description,
-                                                           '1024x1024')  # Use the highest available resolution
+
+        # Start the wallpaper generation in a background thread
+        threading.Thread(target=self.generateWallpaperInBackground, args=(description,)).start()
+
+    def generateWallpaperInBackground(self, description):
+        # This method runs in a background thread
+        image_url = wallpaper_generator.generate_wallpaper(description, '1024x1024')
+
         if image_url:
-            self.download_and_display_image(image_url, self.selected_resolution)
-            print("Wallpaper generated successfully.")
+            self.downloadAndGenerateImage(image_url, self.selected_resolution)
         else:
-            self.floatingButtonWidget.setText("Failed to generate wallpaper.")
-            print("Failed to generate wallpaper.")
-    @pyqtSlot()
-    def on_click(self):
-        self.generate_wallpaper()
+            self.updateUI.emit("Failed to generate wallpaper.")
+
+        self.floatingButtonWidget.setIsLoading(False)
 
 
-    def download_and_display_image(self, image_url, target_resolution):
+    def downloadAndGenerateImage(self, image_url, target_resolution):
         try:
             response = requests.get(image_url)
             response.raise_for_status()
 
-            image_data = response.content
+            self.image_data = response.content
             # Write the binary data to a temporary file
             with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as temp_image:
-                temp_image.write(image_data)
+                temp_image.write(self.image_data)
                 temp_image_path = temp_image.name
                 print(f'temp image path {temp_image_path}')
 
@@ -120,7 +168,7 @@ class WallpaperGeneratorApp(QMainWindow):
 
             # Display Image in QLabel
             pixmap = QPixmap(temp_image_path)
-            self.floatingButtonWidget.set_image(
+            self.floatingButtonWidget.setImage(
                 pixmap.scaled(self.floatingButtonWidget.width(), self.floatingButtonWidget.height(), Qt.KeepAspectRatio))
 
             # Insert wallpaper record into the database
@@ -128,10 +176,9 @@ class WallpaperGeneratorApp(QMainWindow):
             image_data = base64.b64encode(response.content).decode('utf-8')
             self.insert_wallpaper(self.textbox.text(), target_resolution, image_data)
 
-            # Set the image as wallpaper
-            set_wallpaper(response.content)
+            self.floatingButtonWidget.setImageData(response.content)
         except Exception as e:
-            self.floatingButtonWidget.set_text("Failed to download or display wallpaper.")
+            self.floatingButtonWidget.setText("Failed to download or display wallpaper.")
             print(f"Error: {e}")
 
     def upscale_image(self, image_path, target_width, target_height):
